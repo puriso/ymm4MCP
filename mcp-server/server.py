@@ -81,6 +81,7 @@ TOOLS = [
                 "frame": {"type": "integer"},
                 "layer": {"type": "integer"},
                 "length": {"type": "integer"},
+                "type": {"type": "string"},
                 "prop": {"type": "string"},
                 "value": {"type": "string"},
                 "effect": {"type": "string"},
@@ -234,6 +235,16 @@ async def dispatch(args: dict) -> Any:
                         "prop": args.get("prop", ""), 
                         "value": str(args.get("value", ""))
                     })
+                case "properties":
+                    payload = {}
+                    for key in (
+                        "frame", "layer", "type", "targets", "length", "group",
+                        "sameGroupOnly", "layerRange", "x", "y", "z", "zoom",
+                        "scale", "rotation", "opacity", "repeat", "memo",
+                        "locked", "hidden", "itemColor", "composeImages",
+                    ):
+                        if key in args: payload[key] = args[key]
+                    return await ymm4_post("/items/properties", payload)
                 case "effect":
                     return await ymm4_post("/items/effect", {
                         "frame": args.get("frame", 0), 

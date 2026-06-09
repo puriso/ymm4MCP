@@ -118,6 +118,7 @@ namespace YMM4McpPlugin
                     ("POST", "/api/items/effect/video") => await AddVideoEffect(req),
                     ("POST", "/api/items/effect") => await AddEffectToItem(req),
                     ("POST", "/api/items/prop") => await SetItemProp(req),
+                    ("POST", "/api/items/properties") => await SetItemProperties(req),
                     ("POST", "/api/items/group/add") => await SetItemGroup(req),
                     ("GET", "/api/effects/list") => ListEffects(),
                     ("POST", "/api/items/delete") => await DeleteItems(req),
@@ -450,6 +451,82 @@ namespace YMM4McpPlugin
                 try { p.SetValue(targetItem, Convert.ChangeType(pVal, p.PropertyType)); return (object)new { success = true, prop = pName, value = pVal }; }
                 catch (Exception ex) { return (object)new { success = false, error = ex.Message }; }
             });
+        }
+
+        private async Task<object> SetItemProperties(HttpListenerRequest req)
+        {
+            var b = await ReadBody(req);
+            var targets = ReadTargets(b);
+            string typePattern = GetStr(b, "type", "");
+            var motion = GetGroupMotionSpec(b);
+
+            return Application.Current.Dispatcher.Invoke(() =>
+            {
+                var vm = GetMainViewModel(); if (vm == null) return (object)new { success = false, error = "VM失敗" };
+                var tvm = GetPropObj(vm, "ActiveTimelineViewModel"); if (tvm == null) return (object)new { success = false, error = "TVM失敗" };
+                var rawItems = GetPropEnum(tvm, "Items"); if (rawItems == null) return (object)new { success = false, error = "Items失敗" };
+
+                var results = new List<object>();
+                int successCount = 0;
+                foreach (var target in targets)
+                {
+                    var item = FindTimelineItem(rawItems, target.Frame, target.Layer, typePattern);
+                    if (item == null)
+                    {
+                        results.Add(new { success = false, target.Frame, target.Layer, type = typePattern, error = "対象アイテムなし" });
+                        continue;
+                    }
+
+                    var props = new List<object>();
+                    if (b.TryGetValue("length", out _)) props.Add(TrySetAnyProp(item, new[] { "Length", "Duration" }, GetInt(b, "length", 0)));
+                    if (b.TryGetValue("group", out _)) props.Add(TrySetAnyProp(item, GroupPropNames, GetInt(b, "group", 0)));
+                    if (b.TryGetValue("sameGroupOnly", out _)) props.Add(TrySetAnyProp(item, new[] { "SameGroupOnly", "IsSameGroupOnly", "IsGroupOnly", "TargetSameGroupOnly", "同じグループのみ" }, GetBool(b, "sameGroupOnly", true)));
+                    if (b.TryGetValue("layerRange", out _)) props.Add(TrySetAnyProp(item, new[] { "LayerRange", "GroupRange", "Range", "TargetLayerRange", "対象レイヤー数", "レイヤー範囲" }, GetInt(b, "layerRange", 0)));
+                    props.AddRange(ApplyGroupMotion(item, motion));
+                    props.AddRange(ApplyGroupOptions(item, b));
+
+                    successCount++;
+                    results.Add(new { success = true, target.Frame, target.Layer, type = item.GetType().Name, properties = props });
+                }
+
+                return (object)new { success = successCount == targets.Count, targetCount = targets.Count, successCount, failureCount = targets.Count - successCount, results };
+            });
+        }
+
+        private static List<(int Frame, int Layer)> ReadTargets(Dictionary<string, JsonElement> body)
+        {
+            var targets = new List<(int Frame, int Layer)>();
+            if (body.TryGetValue("targets", out var te) && te.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var t in te.EnumerateArray())
+                {
+                    if (t.ValueKind != JsonValueKind.Object) continue;
+                    int frame = t.TryGetProperty("frame", out var fe) && fe.ValueKind == JsonValueKind.Number ? fe.GetInt32() : -1;
+                    int layer = t.TryGetProperty("layer", out var le) && le.ValueKind == JsonValueKind.Number ? le.GetInt32() : -1;
+                    if (frame >= 0 && layer >= 0) targets.Add((frame, layer));
+                }
+            }
+            if (targets.Count == 0) targets.Add((GetInt(body, "frame", 0), GetInt(body, "layer", 0)));
+            return targets;
+        }
+
+        private static object? FindTimelineItem(System.Collections.IEnumerable rawItems, int frame, int layer, string typePattern)
+        {
+            foreach (var iv in rawItems)
+            {
+                var item = GetPropObj(iv, "Item") ?? iv;
+                try
+                {
+                    var frameProp = FindProperty(item.GetType(), "Frame");
+                    var layerProp = FindProperty(item.GetType(), "Layer");
+                    int itemFrame = (int)(frameProp?.GetValue(item) ?? -1);
+                    int itemLayer = (int)(layerProp?.GetValue(item) ?? -1);
+                    bool typeMatches = string.IsNullOrWhiteSpace(typePattern) || item.GetType().Name.Contains(typePattern, StringComparison.OrdinalIgnoreCase);
+                    if (itemFrame == frame && itemLayer == layer && typeMatches) return item;
+                }
+                catch { }
+            }
+            return null;
         }
 
         private async Task<object> AddGroupControlItem(HttpListenerRequest req)
