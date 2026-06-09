@@ -124,6 +124,11 @@ applies any matching properties it can find and reports failures per field. Use
 `GET /api/debug/group` and `GET /api/debug/item?frame=...&layer=...` when
 verifying a YMM4 version.
 
+Beta note: `/api/items/properties` applies those same beta fields to existing
+items selected by `frame`/`layer` or `targets:[{"frame":600,"layer":0}]`. This is
+best-effort reflection and reports per-field success/failure. MCP exposes this as
+`action="edit_item", sub_action="properties"`.
+
 ### 映像確認系
 | エンドポイント | 説明 |
 |---|---|
@@ -168,6 +173,9 @@ Beta note: MCP `add_item/group_control` also forwards optional `x`, `y`, `z`,
 `zoom`, `scale`, `rotation`, `opacity`, `repeat`, `memo`, `locked`, `hidden`,
 `itemColor`, and `composeImages` fields. Treat this as beta-level support until
 each target YMM4 version has been verified.
+
+Beta note: MCP `edit_item/properties` forwards `frame`, `layer`, `targets`, and
+the same beta fields to `/api/items/properties` for existing item updates.
 
 **add_scriptのパラメータ：**
 ```python
