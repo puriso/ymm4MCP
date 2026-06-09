@@ -483,7 +483,7 @@ namespace YMM4McpPlugin
                     item = CreateBestEffort(type, frame, layer, length, group, sameGroupOnly, layerRange);
                     if (item == null) return (object)new { success = false, error = "グループ制御アイテムを生成できません", type = type.FullName, constructors = DescribeConstructors(type), candidates = Candidates() };
 
-                    var propResults = new List<object>
+            var propResults = new List<object>
                     {
                         TrySetAnyProp(item, new[] { "Frame" }, frame),
                         TrySetAnyProp(item, new[] { "Layer" }, layer),
@@ -493,6 +493,7 @@ namespace YMM4McpPlugin
                         TrySetAnyProp(item, new[] { "LayerRange", "GroupRange", "Range", "TargetLayerRange", "対象レイヤー数", "レイヤー範囲" }, layerRange)
                     };
                     propResults.AddRange(ApplyGroupMotion(item, motion));
+                    propResults.AddRange(ApplyGroupOptions(item, b));
 
                     var addResult = TryAddTimelineItem(vm, tvm, mainModel, timelineObj, item, frame, layer, length, group, sameGroupOnly, layerRange);
                     if (!addResult.Success)
@@ -1523,6 +1524,7 @@ namespace YMM4McpPlugin
         private sealed record GroupMotionSpec(
             (double? From, double? To)? X,
             (double? From, double? To)? Y,
+            (double? From, double? To)? Z,
             (double? From, double? To)? Zoom,
             (double? From, double? To)? Scale,
             (double? From, double? To)? Rotation,
@@ -1534,6 +1536,7 @@ namespace YMM4McpPlugin
             return new GroupMotionSpec(
                 ReadRange(b, "x", "xFrom", "xTo"),
                 ReadRange(b, "y", "yFrom", "yTo"),
+                ReadRange(b, "z", "zFrom", "zTo"),
                 ReadRange(b, "zoom", "zoomFrom", "zoomTo"),
                 ReadRange(b, "scale", "scaleFrom", "scaleTo"),
                 ReadRange(b, "rotation", "rotationFrom", "rotationTo"),
@@ -1592,12 +1595,90 @@ namespace YMM4McpPlugin
             var results = new List<object>();
             if (motion.X is { } x) results.Add(TrySetRangeProp(item, "x", new[] { "X", "XValue", "PositionX", "XPosition", "XParameter", "XParam" }, x.From, x.To));
             if (motion.Y is { } y) results.Add(TrySetRangeProp(item, "y", new[] { "Y", "YValue", "PositionY", "YPosition", "YParameter", "YParam" }, y.From, y.To));
+            if (motion.Z is { } z) results.Add(TrySetRangeProp(item, "z", new[] { "Z", "ZValue", "PositionZ", "ZPosition", "ZParameter", "ZParam" }, z.From, z.To));
             if (motion.Zoom is { } zoom) results.Add(TrySetRangeProp(item, "zoom", new[] { "Zoom", "ZoomValue", "ZoomParameter", "拡大率" }, zoom.From, zoom.To));
             if (motion.Scale is { } scale) results.Add(TrySetRangeProp(item, "scale", new[] { "Scale", "ScaleX", "ScaleY", "ScaleParameter", "倍率" }, scale.From, scale.To));
             if (motion.Rotation is { } rotation) results.Add(TrySetRangeProp(item, "rotation", new[] { "Rotation", "Angle", "Rot", "RotationParameter", "回転角" }, rotation.From, rotation.To));
             if (motion.Opacity is { } opacity) results.Add(TrySetRangeProp(item, "opacity", new[] { "Opacity", "Alpha", "OpacityParameter", "不透明度" }, opacity.From, opacity.To));
             if (motion.Repeat.HasValue) results.Add(TrySetAnyNestedProp(item, "repeat", new[] { "Repeat", "IsRepeat", "Loop", "IsLoop", "IsLooped", "IsRepeated", "繰り返し", "反復" }, motion.Repeat.Value));
             return results;
+        }
+
+        private static IEnumerable<object> ApplyGroupOptions(object item, Dictionary<string, JsonElement> body)
+        {
+            var results = new List<object>();
+            if (TryReadScalar(body, out var memo, "memo", "note", "remark", "remarks", "description"))
+                results.Add(TrySetOptionProp(item, "memo", new[] { "Memo", "Note", "Remark", "Remarks", "Description", "Comment", "備考" }, memo));
+            if (TryReadScalar(body, out var locked, "locked", "isLocked", "lock"))
+                results.Add(TrySetOptionProp(item, "locked", new[] { "IsLocked", "Locked", "Lock", "ロック" }, locked));
+            if (TryReadScalar(body, out var hidden, "hidden", "isHidden"))
+                results.Add(TrySetOptionProp(item, "hidden", new[] { "IsHidden", "Hidden", "非表示" }, hidden));
+            if (TryReadScalar(body, out var itemColor, "itemColor", "color", "itemColour"))
+                results.Add(TrySetOptionProp(item, "itemColor", new[] { "ItemColor", "Color", "TimelineColor", "DisplayColor", "アイテムの色", "アイテム色" }, itemColor));
+            if (TryReadScalar(body, out var composeImages, "composeImages", "compose", "combineImages", "imageComposition", "imageComposite"))
+                results.Add(TrySetOptionProp(item, "composeImages", new[] { "IsCombiningImages", "IsImageComposition", "IsComposite", "IsImageComposite", "ImageComposite", "CompositeImage", "CombineImages", "画像を合成" }, composeImages));
+            return results;
+        }
+
+        private static object TrySetOptionProp(object obj, string label, string[] names, object? value)
+        {
+            if (value == null) return new { success = false, option = label, error = "value is null" };
+            if (TrySetNamedValue(obj, names, value, out var prop)) return new { success = true, option = label, property = prop, mode = "direct" };
+            foreach (var p in obj.GetType().GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p.GetIndexParameters().Length == 0))
+            {
+                object? child = null;
+                try { child = p.GetValue(obj); } catch { }
+                if (child == null || IsSimpleType(child.GetType())) continue;
+                if (TrySetNamedValue(child, names, value, out var childProp)) return new { success = true, option = label, property = $"{p.Name}.{childProp}", mode = "nested" };
+            }
+            return new { success = false, option = label, error = "property not found" };
+        }
+
+        private static bool TryReadScalar(Dictionary<string, JsonElement> body, out object? value, params string[] keys)
+        {
+            value = null;
+            foreach (var key in keys)
+            {
+                if (!body.TryGetValue(key, out var e)) continue;
+                value = ReadScalar(e);
+                return value != null;
+            }
+            return false;
+        }
+
+        private static object? ReadScalar(JsonElement e)
+        {
+            try
+            {
+                return e.ValueKind switch
+                {
+                    JsonValueKind.String => e.GetString(),
+                    JsonValueKind.True => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.Number when e.TryGetInt32(out var i) => i,
+                    JsonValueKind.Number => e.GetDouble(),
+                    JsonValueKind.Object => ReadColorObject(e),
+                    _ => null
+                };
+            }
+            catch { return null; }
+        }
+
+        private static string? ReadColorObject(JsonElement e)
+        {
+            if (!TryReadColorByte(e, "r", out var r) || !TryReadColorByte(e, "g", out var g) || !TryReadColorByte(e, "b", out var b))
+                return null;
+            var a = TryReadColorByte(e, "a", out var alpha) ? alpha : 255;
+            return $"#{a:X2}{r:X2}{g:X2}{b:X2}";
+        }
+
+        private static bool TryReadColorByte(JsonElement e, string name, out byte value)
+        {
+            value = 0;
+            if (!e.TryGetProperty(name, out var p) || p.ValueKind != JsonValueKind.Number || !p.TryGetInt32(out var i))
+                return false;
+            value = (byte)Math.Clamp(i, 0, 255);
+            return true;
         }
 
         private static object TrySetRangeProp(object obj, string label, string[] names, double? from, double? to)
@@ -1697,6 +1778,9 @@ namespace YMM4McpPlugin
             for (var t = type; t != null && t != typeof(object); t = t.BaseType)
             {
                 var p = t.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                if (p != null) return p;
+                p = t.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                    .FirstOrDefault(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
                 if (p != null) return p;
             }
             return null;
@@ -1953,12 +2037,61 @@ namespace YMM4McpPlugin
         private static object? ConvertTo(object value, Type type)
         {
             var t = Nullable.GetUnderlyingType(type) ?? type;
+            if (TryConvertColor(value, t, out var color)) return color;
             if (t.IsEnum)
             {
                 if (value is string s) return Enum.Parse(t, s, true);
                 return Enum.ToObject(t, value);
             }
             return Convert.ChangeType(value, t);
+        }
+
+        private static bool TryConvertColor(object value, Type type, out object? converted)
+        {
+            converted = null;
+            var fullName = type.FullName ?? "";
+            if (fullName != "System.Windows.Media.Color"
+                && fullName != "System.Drawing.Color"
+                && fullName != "System.Windows.Media.Brush"
+                && fullName != "System.Windows.Media.SolidColorBrush")
+                return false;
+
+            if (!TryParseColor(value, out var a, out var r, out var g, out var b))
+                return false;
+
+            if (fullName == "System.Windows.Media.Brush" || fullName == "System.Windows.Media.SolidColorBrush")
+            {
+                converted = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(a, r, g, b));
+                return true;
+            }
+
+            converted = fullName == "System.Windows.Media.Color"
+                ? System.Windows.Media.Color.FromArgb(a, r, g, b)
+                : System.Drawing.Color.FromArgb(a, r, g, b);
+            return true;
+        }
+
+        private static bool TryParseColor(object value, out byte a, out byte r, out byte g, out byte b)
+        {
+            a = 255; r = 0; g = 0; b = 0;
+            if (value is not string s) return false;
+            s = s.Trim();
+            if (!s.StartsWith("#", StringComparison.Ordinal)) return false;
+            var hex = s[1..];
+            if (hex.Length == 6)
+            {
+                return byte.TryParse(hex[..2], System.Globalization.NumberStyles.HexNumber, null, out r)
+                    && byte.TryParse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, null, out g)
+                    && byte.TryParse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out b);
+            }
+            if (hex.Length == 8)
+            {
+                return byte.TryParse(hex[..2], System.Globalization.NumberStyles.HexNumber, null, out a)
+                    && byte.TryParse(hex.Substring(2, 2), System.Globalization.NumberStyles.HexNumber, null, out r)
+                    && byte.TryParse(hex.Substring(4, 2), System.Globalization.NumberStyles.HexNumber, null, out g)
+                    && byte.TryParse(hex.Substring(6, 2), System.Globalization.NumberStyles.HexNumber, null, out b);
+            }
+            return false;
         }
 
         private static object? GetAnyProp(object obj, IEnumerable<string> names)

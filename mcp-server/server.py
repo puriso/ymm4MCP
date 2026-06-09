@@ -92,11 +92,17 @@ TOOLS = [
                 "layerRange": {"type": "integer"},
                 "x": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] X motion"},
                 "y": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] Y motion"},
+                "z": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] Z motion"},
                 "zoom": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] zoom motion"},
                 "scale": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] scale motion"},
                 "rotation": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] rotation motion"},
                 "opacity": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] opacity motion"},
                 "repeat": {"type": "boolean", "description": "group_control beta: repeat/loop flag when YMM4 exposes a compatible property"},
+                "memo": {"type": "string", "description": "group_control beta: item memo/remark"},
+                "locked": {"type": "boolean", "description": "group_control beta: item lock flag"},
+                "hidden": {"type": "boolean", "description": "group_control beta: item hidden flag"},
+                "itemColor": {"type": "string", "description": "group_control beta: item color such as #RRGGBB or #AARRGGBB"},
+                "composeImages": {"type": "boolean", "description": "group_control beta: image composition flag"},
                 "targets": {
                     "type": "array",
                     "items": {
@@ -203,7 +209,7 @@ async def dispatch(args: dict) -> Any:
             if "group" in args: payload["group"] = args["group"]
             if "sameGroupOnly" in args: payload["sameGroupOnly"] = args["sameGroupOnly"]
             if "layerRange" in args: payload["layerRange"] = args["layerRange"]
-            for key in ("x", "y", "zoom", "scale", "rotation", "opacity", "repeat"):
+            for key in ("x", "y", "z", "zoom", "scale", "rotation", "opacity", "repeat", "memo", "locked", "hidden", "itemColor", "composeImages"):
                 if key in args: payload[key] = args[key]
             
             match sub_action:
