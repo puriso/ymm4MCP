@@ -74,19 +74,47 @@ TOOLS = [
                 },
                 "sub_action": {
                     "type": "string",
-                    "description": "情報取得(status,project,items,effects_list)、操作(play,stop,save)、アイテム追加(text,voice,tachie,face)、編集(face_param,property,effect,delete,duration)のいずれか"
+                    "description": "情報取得(status,project,items,effects_list,group_debug)、操作(play,stop,save)、アイテム追加(text,voice,tachie,face,group_control)、編集(face_param,property,effect,delete,duration,group)のいずれか"
                 },
                 "text": {"type": "string", "description": "表示または発話テキスト"},
                 "character": {"type": "string", "description": "キャラクター名"},
                 "frame": {"type": "integer"},
                 "layer": {"type": "integer"},
                 "length": {"type": "integer"},
+                "type": {"type": "string"},
                 "prop": {"type": "string"},
                 "value": {"type": "string"},
                 "effect": {"type": "string"},
                 "params": {"type": "object"},
                 "frames": {"type": "integer"},
                 "layers": {"type": "array", "items": {"type": "integer"}},
+                "group": {"type": "integer"},
+                "sameGroupOnly": {"type": "boolean"},
+                "layerRange": {"type": "integer"},
+                "x": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] X motion"},
+                "y": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] Y motion"},
+                "z": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] Z motion"},
+                "zoom": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] zoom motion"},
+                "scale": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] scale motion"},
+                "rotation": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] rotation motion"},
+                "opacity": {"type": "array", "items": {"type": "number"}, "description": "group_control beta: [from, to] opacity motion"},
+                "repeat": {"type": "boolean", "description": "group_control beta: repeat/loop flag when YMM4 exposes a compatible property"},
+                "memo": {"type": "string", "description": "group_control beta: item memo/remark"},
+                "locked": {"type": "boolean", "description": "group_control beta: item lock flag"},
+                "hidden": {"type": "boolean", "description": "group_control beta: item hidden flag"},
+                "itemColor": {"type": "string", "description": "group_control beta: item color such as #RRGGBB or #AARRGGBB"},
+                "composeImages": {"type": "boolean", "description": "group_control beta: image composition flag"},
+                "targets": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "frame": {"type": "integer"},
+                            "layer": {"type": "integer"}
+                        },
+                        "required": ["frame", "layer"]
+                    }
+                },
                 "lines": {
                     "type": "array",
                     "items": {"type": "object", "properties": {"character": {"type": "string"}, "text": {"type": "string"}, "layer": {"type": "integer"}}}
@@ -162,6 +190,7 @@ async def dispatch(args: dict) -> Any:
                 case "project": return await ymm4_get("/project")
                 case "items": return await ymm4_get("/items")
                 case "effects_list": return await ymm4_get("/effects/list")
+                case "group_debug": return await ymm4_get("/debug/group")
                 case _: raise ValueError(f"Unknown sub_action for get_info: {sub_action}")
 
         case "control":
@@ -178,12 +207,18 @@ async def dispatch(args: dict) -> Any:
             if "frame" in args: payload["frame"] = args["frame"]
             if "layer" in args: payload["layer"] = args["layer"]
             if "length" in args: payload["length"] = args["length"]
+            if "group" in args: payload["group"] = args["group"]
+            if "sameGroupOnly" in args: payload["sameGroupOnly"] = args["sameGroupOnly"]
+            if "layerRange" in args: payload["layerRange"] = args["layerRange"]
+            for key in ("x", "y", "z", "zoom", "scale", "rotation", "opacity", "repeat", "memo", "locked", "hidden", "itemColor", "composeImages"):
+                if key in args: payload[key] = args[key]
             
             match sub_action:
                 case "text": return await ymm4_post("/items/text", payload)
                 case "voice": return await ymm4_post("/items/voice", payload)
                 case "tachie": return await ymm4_post("/items/tachie", payload)
                 case "face": return await ymm4_post("/items/face", payload)
+                case "group_control": return await ymm4_post("/items/group-control", payload)
                 case _: raise ValueError(f"Unknown sub_action for add_item: {sub_action}")
 
         case "edit_item":
@@ -200,6 +235,16 @@ async def dispatch(args: dict) -> Any:
                         "prop": args.get("prop", ""), 
                         "value": str(args.get("value", ""))
                     })
+                case "properties":
+                    payload = {}
+                    for key in (
+                        "frame", "layer", "type", "targets", "length", "group",
+                        "sameGroupOnly", "layerRange", "x", "y", "z", "zoom",
+                        "scale", "rotation", "opacity", "repeat", "memo",
+                        "locked", "hidden", "itemColor", "composeImages",
+                    ):
+                        if key in args: payload[key] = args[key]
+                    return await ymm4_post("/items/properties", payload)
                 case "effect":
                     return await ymm4_post("/items/effect", {
                         "frame": args.get("frame", 0), 
@@ -214,6 +259,11 @@ async def dispatch(args: dict) -> Any:
                     return await ymm4_post("/items/delete", payload)
                 case "duration":
                     return await ymm4_post("/timeline/duration", {"frames": args.get("frames", 0)})
+                case "group":
+                    return await ymm4_post("/items/group/add", {
+                        "targets": args.get("targets", []),
+                        "group": args.get("group", 0)
+                    })
                 case _: raise ValueError(f"Unknown sub_action for edit_item: {sub_action}")
 
         case "add_script":
