@@ -478,6 +478,8 @@ namespace YMM4McpPlugin
                     }
 
                     var props = new List<object>();
+                    if (b.TryGetValue("newFrame", out _)) props.Add(TrySetAnyProp(item, new[] { "Frame" }, GetInt(b, "newFrame", target.Frame)));
+                    if (b.TryGetValue("newLayer", out _)) props.Add(TrySetAnyProp(item, new[] { "Layer" }, GetInt(b, "newLayer", target.Layer)));
                     if (b.TryGetValue("length", out _)) props.Add(TrySetAnyProp(item, new[] { "Length", "Duration" }, GetInt(b, "length", 0)));
                     if (b.TryGetValue("group", out _)) props.Add(TrySetAnyProp(item, GroupPropNames, GetInt(b, "group", 0)));
                     if (b.TryGetValue("sameGroupOnly", out _)) props.Add(TrySetAnyProp(item, new[] { "SameGroupOnly", "IsSameGroupOnly", "IsGroupOnly", "TargetSameGroupOnly", "同じグループのみ" }, GetBool(b, "sameGroupOnly", true)));

@@ -80,6 +80,8 @@ TOOLS = [
                 "character": {"type": "string", "description": "キャラクター名"},
                 "frame": {"type": "integer"},
                 "layer": {"type": "integer"},
+                "newFrame": {"type": "integer", "description": "edit_item/properties beta: updated frame value"},
+                "newLayer": {"type": "integer", "description": "edit_item/properties beta: updated layer value"},
                 "length": {"type": "integer"},
                 "type": {"type": "string"},
                 "prop": {"type": "string"},
@@ -239,7 +241,7 @@ async def dispatch(args: dict) -> Any:
                     payload = {}
                     for key in (
                         "frame", "layer", "type", "targets", "length", "group",
-                        "sameGroupOnly", "layerRange", "x", "y", "z", "zoom",
+                        "newFrame", "newLayer", "sameGroupOnly", "layerRange", "x", "y", "z", "zoom",
                         "scale", "rotation", "opacity", "repeat", "memo",
                         "locked", "hidden", "itemColor", "composeImages",
                     ):
